@@ -4,6 +4,7 @@
 #include <CanasId.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include "QList.h"
 
 typedef enum {
 	XP_DATATYPE_FLOAT,
@@ -14,12 +15,12 @@ typedef enum {
 } XPStandardDatatypeID;
 
 struct XplaneTrans {
-	uint16_t	canasId;
-	char*		xplaneId;
-	int			xpDataType;
-	int			xpTimesSecond;
-	float		conversionFactor;
-	int			stringSize;
+	uint16_t	canasId = 0;
+	char*		xplaneId = NULL;
+	int			xpDataType = XP_DATATYPE_STRING;
+	int			xpTimesSecond = 2;
+	float		conversionFactor = 1;
+	int			stringSize = 260;
 };
 
 struct XplanePlanes {
@@ -55,54 +56,71 @@ struct XplanePlanes {
 // #ifdef ICAN_MASTER
 
 // todo : make array for multiple versions of plane
-static XplaneTrans getPlaneName = { CANAS_NOD_PLANE_NAME,"sim/aircraft/view/acf_descrip",XP_DATATYPE_STRING,2,1,260 };
+//static XplaneTrans getPlaneName = { CANAS_NOD_PLANE_NAME,"sim/aircraft/view/acf_descrip",XP_DATATYPE_STRING,2,1,260 };
 
-static XplanePlanes suportedPlanes[]{
-	{"Cessna 172 SP Skyhawk - 180HP",
-		{
-			{CANAS_NOD_DEF_172_FUEL_L,"laminar/c172/fuel/fuel_quantity_L",XP_DATATYPE_FLOAT,2,1},
-			{CANAS_NOD_DEF_172_FUEL_R,"laminar/c172/fuel/fuel_quantity_R",XP_DATATYPE_FLOAT,2,1},
-			{CANAS_NOD_DEF_172_EGT,"sim/cockpit2/indicators/EGT_deg_C[0]",XP_DATATYPE_FLOAT,2,1},
-			{CANAS_NOD_DEF_172_FUEL_FLOW,"sim/cockpit2/engine/indicators/fuel_flow_kg_sec[0]",XP_DATATYPE_FLOAT,2,1},
-			{CANAS_NOD_DEF_172_BAT_AMPS,"laminar/c172/electrical/battery_amps",XP_DATATYPE_FLOAT,2,1},
-			{CANAS_NOD_DEF_172_SUCTION,"sim/cockpit/misc/vacuum",XP_DATATYPE_FLOAT,2,1},
-			{CANAS_NOD_DEF_172_OIL_TMP,"sim/cockpit2/indicators/oil_temperature_deg_C[0]",XP_DATATYPE_FLOAT,2,1},
-			{CANAS_NOD_DEF_172_OIL_PRES,"sim/cockpit2/indicators/oil_pressure_psi[0]",XP_DATATYPE_FLOAT,2,1},
-			{CANAS_NOD_USR_INSTRUMENT_LIGHT_INTENSITY,"sim/cockpit/electrical/instrument_brightness",XP_DATATYPE_FLOAT,2,1},
-			{CANAS_NOD_USR_AVIONICS_ON,"172/ip_base/b_avionics_master",XP_DATATYPE_FLOAT,5,1},
-			{0,"",0}
-		}
-	},
-
-	{"Airfoillabs Cessna 172SP",
-		{
-			{CANAS_NOD_DEF_172_FUEL_L,"172/instruments/uni_fuel_L_x",XP_DATATYPE_FLOAT,2,1},
-			{CANAS_NOD_DEF_172_FUEL_R,"172/instruments/uni_fuel_R_x",XP_DATATYPE_FLOAT,2,1},
-			{CANAS_NOD_DEF_172_EGT,"172/instruments/uni_EGT",XP_DATATYPE_FLOAT,2,1},
-			{CANAS_NOD_DEF_172_FUEL_FLOW,"172/instruments/uni_FF",XP_DATATYPE_FLOAT,2,1},
-			{CANAS_NOD_DEF_172_BAT_AMPS,"172/instruments/uni_bat_amps",XP_DATATYPE_FLOAT,2,1},
-			{CANAS_NOD_DEF_172_SUCTION,"172/instruments/uni_suction",XP_DATATYPE_FLOAT,2,1},
-			{CANAS_NOD_DEF_172_OIL_TMP,"172/instruments/uni_oil_F",XP_DATATYPE_FLOAT,2,1},
-			{CANAS_NOD_DEF_172_OIL_PRES,"172/instruments/uni_oil_pres",XP_DATATYPE_FLOAT,2,1},
-			{CANAS_NOD_USR_INSTRUMENT_LIGHT_INTENSITY,"172/lights/int/int_radio_panel_lt",XP_DATATYPE_FLOAT,2,1},
-			{CANAS_NOD_USR_AVIONICS_ON,"sim/cockpit/electrical/battery_on",XP_DATATYPE_FLOAT,5,1},
-			{0,"",0}
-		}
-	}
-};
+//static XplanePlanes suportedPlanes[]{
+//	{"Cessna 172 SP Skyhawk - 180HP",
+//		{
+//			{CANAS_NOD_DEF_172_FUEL_L,"laminar/c172/fuel/fuel_quantity_L",XP_DATATYPE_FLOAT,2,1},
+//			{CANAS_NOD_DEF_172_FUEL_R,"laminar/c172/fuel/fuel_quantity_R",XP_DATATYPE_FLOAT,2,1},
+//			{CANAS_NOD_DEF_172_EGT,"sim/cockpit2/indicators/EGT_deg_C[0]",XP_DATATYPE_FLOAT,2,1},
+//			{CANAS_NOD_DEF_172_FUEL_FLOW,"sim/cockpit2/engine/indicators/fuel_flow_kg_sec[0]",XP_DATATYPE_FLOAT,2,1},
+//			{CANAS_NOD_DEF_172_BAT_AMPS,"laminar/c172/electrical/battery_amps",XP_DATATYPE_FLOAT,2,1},
+//			{CANAS_NOD_DEF_172_SUCTION,"sim/cockpit/misc/vacuum",XP_DATATYPE_FLOAT,2,1},
+//			{CANAS_NOD_DEF_172_OIL_TMP,"sim/cockpit2/indicators/oil_temperature_deg_C[0]",XP_DATATYPE_FLOAT,2,1},
+//			{CANAS_NOD_DEF_172_OIL_PRES,"sim/cockpit2/indicators/oil_pressure_psi[0]",XP_DATATYPE_FLOAT,2,1},
+//			{CANAS_NOD_USR_INSTRUMENT_LIGHT_INTENSITY,"sim/cockpit/electrical/instrument_brightness",XP_DATATYPE_FLOAT,2,1},
+//			{CANAS_NOD_USR_AVIONICS_ON,"172/ip_base/b_avionics_master",XP_DATATYPE_FLOAT,5,1},
+//			{0,"",0}
+//		}
+//	},
+//
+//	{"Airfoillabs Cessna 172SP",
+//		{
+//			{CANAS_NOD_DEF_172_FUEL_L,"172/instruments/uni_fuel_L_x",XP_DATATYPE_FLOAT,2,1},
+//			{CANAS_NOD_DEF_172_FUEL_R,"172/instruments/uni_fuel_R_x",XP_DATATYPE_FLOAT,2,1},
+//			{CANAS_NOD_DEF_172_EGT,"172/instruments/uni_EGT",XP_DATATYPE_FLOAT,2,1},
+//			{CANAS_NOD_DEF_172_FUEL_FLOW,"172/instruments/uni_FF",XP_DATATYPE_FLOAT,2,1},
+//			{CANAS_NOD_DEF_172_BAT_AMPS,"172/instruments/uni_bat_amps",XP_DATATYPE_FLOAT,2,1},
+//			{CANAS_NOD_DEF_172_SUCTION,"172/instruments/uni_suction",XP_DATATYPE_FLOAT,2,1},
+//			{CANAS_NOD_DEF_172_OIL_TMP,"172/instruments/uni_oil_F",XP_DATATYPE_FLOAT,2,1},
+//			{CANAS_NOD_DEF_172_OIL_PRES,"172/instruments/uni_oil_pres",XP_DATATYPE_FLOAT,2,1},
+//			{CANAS_NOD_USR_INSTRUMENT_LIGHT_INTENSITY,"172/lights/int/int_radio_panel_lt",XP_DATATYPE_FLOAT,2,1},
+//			{CANAS_NOD_USR_AVIONICS_ON,"sim/cockpit/electrical/battery_on",XP_DATATYPE_FLOAT,5,1},
+//			{0,"",0}
+//		}
+//	}
+//};
 //==================================================================================================
 //==================================================================================================
 class XpPlaneInfo {
 public:
 
-	XpPlaneInfo();
-	~XpPlaneInfo();
+	XpPlaneInfo() {};
+	~XpPlaneInfo() {};
+
+	//	static  XplaneTrans* getName() { return &getPlaneName; };
 
 	static char* fromCan2Xplane(uint16_t canID);
 	static  XplaneTrans* fromCan2XplaneElement(uint16_t canID);
-	static  XplaneTrans* getName();
 	static int findPlane(char* planeName);
+	static int setIniFile(const char* fileName);
+
 private:
 	static int _currentPlane;
+	static char* _iniFile;
+
+	struct _planeInfo {
+		char* name = NULL;
+		unsigned long filePos;
+	};
+
+	static QList<_planeInfo *> _planeInfoItems;
+	static QList<XplaneTrans*> _planeTranslations;
+
+	static int _readIniFile(_planeInfo* planeInfo);
+	static int _getNext(char * buffer, char terminator, char * newVal);
+	static int _scanPlanes();
+	static int _findPlane(uint16_t canID);
 };
 #endif

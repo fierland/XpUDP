@@ -23,11 +23,11 @@
 #ifndef XpUDP_h_
 #define XpUDP_h_
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <stdlib.h>
-#include <WiFi.h>
 #include <QList.h>
 #include "XpUDPdataRef.h"
-
 #include "GenericDefs.h"
 
 #if defined(ARDUINO) && ARDUINO >= 100
@@ -41,14 +41,19 @@
 #include <limits.h>
 #include "XPUtils.h"
 #include "XpPlaneInfo.h"
+#include "WiFiUdp.h"
 
 constexpr auto XP_BEACONTIMEOUT_MS = 10 * 1000;
+constexpr auto XP_REFQUEUEREADEY_DELAY = 100 / portTICK_PERIOD_MS;
+constexpr auto XP_READER_LOOP_DELAY = 10 / portTICK_PERIOD_MS;
 
 #define XP_Multicast_Port 49707
-#define XP_MulticastAdress_0 239
-#define XP_MulticastAdress_1 255
-#define XP_MulticastAdress_2 1
-#define XP_MulticastAdress_3 1
+#define XP_MulticastAdress "239.255.1.1"
+
+//#define XP_MulticastAdress_0 239
+//#define XP_MulticastAdress_1 255
+//#define XP_MulticastAdress_2 1
+//#define XP_MulticastAdress_3 1
 
 // defines for msg headers used in XP UDP interface.
 #define XPMSG_XXXX	"XXXX" // novalid command
@@ -65,9 +70,9 @@ constexpr auto _Xp_dref_in_msg_size = 413;
 constexpr auto _Xp_rref_size = 400;
 constexpr auto _Xp_dref_size = 509;
 
-constexpr long _Xp_beacon_timeoutMs = 10 * 1000;
+constexpr long _Xp_default_beacon_timeoutMs = XP_BEACONTIMEOUT_MS;
 constexpr long _Xp_beacon_restart_timeoutMs = 10 * 1000;
-constexpr long _Xp_initial_clean_timeoutMs = 10 * 1000;
+constexpr long _Xp_default_initial_clean_timeoutMs = 10 * 1000;
 
 typedef enum _XpCommand {
 	XP_CMD_ALRT,
@@ -82,13 +87,15 @@ typedef enum _XpCommand {
 };
 
 typedef enum _XpRunStates {
-	XP_RUNSTATE_STOP,
+	XP_RUNSTATE_BAD_INIT,
+	XP_RUNSTATE_INIT,
 	XP_RUNSTATE_WIFI_UP,
 	XP_RUNSTATE_UDP_UP,
 	XP_RUNSTATE_GOT_BEACON,
 	XP_RUNSTATE_IS_CLEANING,
 	XP_RUNSTATE_DONE_CLEANING,
 	XP_RUNSTATE_GOT_PLANE,
+	XP_RUNSTATE_STOPPED,
 	XP_RUNSTATE_RUNNIG
 };
 
@@ -126,16 +133,18 @@ public:
 		XP_ERR_NO_PLANE_SET_YET = 6,
 		XP_ERR_REFERENCE_NOT_FOUND = 7,
 		XP_ERR_FAILED = 8,
-		XP_ERR_NOT_FOUND
+		XP_ERR_NOT_FOUND,
+		XP_ERR_BAD_INITFILE,
+		XP_ERR_BAD_RUNSTATE
 	} XpErrorCode;
 
 	//constructor
-	XpUDP(void(*callbackFunc)(uint16_t canId, float par), void(*setStateFunc)(bool state));
+	XpUDP(const char* iniFileName);
 	~XpUDP() {};
 	// start connection
-	int start();   // do we still need this
+	int start(int toCore = 0);
+	int stop();
 
-	int dataReader();				// poll for new data need to be in loop()
 	static short getState();
 
 	int registerDataRef(uint16_t canID, bool recieveOnly = true, int(*callback)(void* value) = NULL);
@@ -143,11 +152,23 @@ public:
 	int unRegisterDataRef(uint16_t canID);
 	int setDataRefValue(uint16_t canID, float value);
 
+	int mainTaskLoop();
+	int checkDataRefQueue();
+	int checkReceiveData();
+
 protected:
+	XplaneTrans _planeInfoRec;// = { CANAS_NOD_PLANE_NAME,NULL,XP_DATATYPE_STRING,2,1,260 };
+	//static XplaneTrans getPlaneName = { CANAS_NOD_PLANE_NAME,"sim/aircraft/view/acf_descrip",XP_DATATYPE_STRING,2,1,260 };
+
+	int ParseIniFile(const char * iniFileName);
+	int dataReader(long startTs);
+
+	int checkDREFQueue();
+
 	static int _processPlaneIdent(void * newInfo);
 
-	int			_startUDP();
-	int 		GetBeacon(long howLong = XP_BEACONTIMEOUT_MS);
+	int		_startUDP();
+	int 	GetBeacon(long howLong = XP_BEACONTIMEOUT_MS);
 
 	void 	sendUDPdata(const char *header, const byte *dataArr, const int arrSize, const int sendSize);
 
@@ -159,13 +180,31 @@ protected:
 	long	_last_start = -10000000000; // make sure it starts first time
 	long	_lastXpConnect = -10000000000;
 	long	_startCleaning = -1;
+	bool	_firstStart = true;
+	int		_myCore = 0;
 
 	//bool _askingForPlaneId = true;
 
-	int checkDataRefQueue();
-	int checkReceiveData();
+	//ini file info
+	uint _XpIni_plane_string_len = 0;
+	char _XpIni_plane_ini_file[128];
+	uint _XpIni_Multicast_Port;
+	char _XpIni_MulticastAdress[32];
+	char* _XpIniget_plane_dataref = NULL;
+	long _Xp_beacon_timeoutMs = _Xp_default_beacon_timeoutMs;
+	long _Xp_initial_clean_timeoutMs = _Xp_default_initial_clean_timeoutMs;
 
 private:
+	//
+	// Internal variables
+	//
+	int _LastError = XpUDP::XP_ERR_SUCCESS;
+	uint16_t _XpListenPort = 49000;
+	IPAddress _XPlaneIP;
+
+	TaskHandle_t xTaskReader = NULL;
+	TaskHandle_t xTaskRefQueue = NULL;
+	TaskHandle_t xTaskCheckReceive = NULL;
 
 	_XpCommand _findCommand(byte *buffer);
 	int _ReadBeacon();
@@ -177,16 +216,11 @@ private:
 
 	byte 		_packetBuffer[_UDP_MAX_PACKET_SIZE]; //buffer to hold incoming and outgoing packets
 	byte 		_packetBufferOut[_UDP_MAX_PACKET_SIZE_OUT]; //buffer to hold incoming and outgoing packets
+	// TODO: Check for ESP32_wifiudp ?
 	WiFiUDP 	_Udp;
 
-	//
-	// Internal variables
-	//
-	int _LastError = XpUDP::XP_ERR_SUCCESS;
-	uint16_t _XpListenPort = 49000;
-	IPAddress _XPlaneIP;
-	void(*_callbackFunc)(uint16_t canId, float par);
-	void(*_setStateFunc)(bool state);
+	//void(*_callbackFunc)(uint16_t canId, float par);
+	//void(*_setStateFunc)(bool state);
 
 	//Send in a “dref_freq” of 0 to stop having X-Pane send the dataref values.
 	struct _Xp_dref_struct_in {
@@ -259,6 +293,7 @@ private:
 	uint32_t _lastRefId = 1;
 
 	int _findDataRefById(int refId);
+	int _findDataRefByCanId(uint16_t CanId);
 	int _getDataRefInfo(_DataRefs * newRef, XplaneTrans* thisXPinfo = NULL);
 	int _registerNewDataRef(uint16_t canasId, bool recieveOnly, int(*callback)(void* value), XplaneTrans *newInfo);
 

@@ -2,6 +2,7 @@
 #define __XPUDPDATAREF_H_
 
 #include "XpPlaneInfo.h"
+#include <bitset>
 //==================================================================================================
 class XpUDPdataRef {
 public:
@@ -13,6 +14,7 @@ public:
 	virtual float getValue() const { return _value; };
 	bool isActive()  const { return _isActive; };
 	bool isChanged() const { return _isChanged; };
+	unsigned long lastTs() { return _timestamp; };
 	void setCallback(int(*callback)(void*)) { _callback = callback; };
 	bool isString()  const { return _isString; };
 	int getId() const { return _refID; };
@@ -41,15 +43,16 @@ public:
 	int setValue(float newValue, int index);
 	virtual char* getCurrentStrValue();
 
+#define MAXBITSET 512
+
 protected:
 	int _endRefId;
 	int _strSize;
 	int _startValue;
 	int _endValue;
-	char *_txtValue;
-	char *_newText;
-	bool _changing = false;
-	int  _receiveCount = 0;
+	char *_txtValue = NULL;
+	char *_newText = NULL;
+	std::bitset<MAXBITSET> _gotBit;
 };
 //==================================================================================================
 class XpUDPfloatDataRef : public XpUDPdataRef {
