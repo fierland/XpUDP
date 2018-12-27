@@ -23,11 +23,15 @@
 #ifndef XpUDP_h_
 #define XpUDP_h_
 
+// define to activate code to test withiout XpLane comment after testing
+//#define XpUDP_TEST_ONLY
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <stdlib.h>
 #include <QList.h>
-#include "XpUDPdataRef.h"
+//#include "XpUDPdataRef.h"
+#include "XpUDPdataRefList.h"
 #include "GenericDefs.h"
 
 #if defined(ARDUINO) && ARDUINO >= 100
@@ -154,11 +158,18 @@ public:
 
 	int mainTaskLoop();
 	int checkDataRefQueue();
-	int checkReceiveData();
+	int checkReceiveData(long ts = 0);
+
+	static int 	sendRREF(XpDataRef* newRef);
 
 protected:
+	static int	sendRREF(uint32_t frequency, uint32_t refID, char * xplaneId);
+
+	XpUDPdataRefList _myDataRefList;
+
 	XplaneTrans _planeInfoRec;// = { CANAS_NOD_PLANE_NAME,NULL,XP_DATATYPE_STRING,2,1,260 };
 	//static XplaneTrans getPlaneName = { CANAS_NOD_PLANE_NAME,"sim/aircraft/view/acf_descrip",XP_DATATYPE_STRING,2,1,260 };
+	int _unRegisterDataRefItem(uint16_t canId);
 
 	int ParseIniFile(const char * iniFileName);
 	int dataReader(long startTs);
@@ -169,8 +180,6 @@ protected:
 
 	int		_startUDP();
 	int 	GetBeacon(long howLong = XP_BEACONTIMEOUT_MS);
-
-	void 	sendUDPdata(const char *header, const byte *dataArr, const int arrSize, const int sendSize);
 
 	static short 	 _RunState;
 #define _gotPlaneId  (_RunState>=XP_RUNSTATE_GOT_PLANE)
@@ -186,9 +195,9 @@ protected:
 	//bool _askingForPlaneId = true;
 
 	//ini file info
-	uint _XpIni_plane_string_len = 0;
+	int _XpIni_plane_string_len = 0;
 	char _XpIni_plane_ini_file[128];
-	uint _XpIni_Multicast_Port;
+	int _XpIni_Multicast_Port;
 	char _XpIni_MulticastAdress[32];
 	char* _XpIniget_plane_dataref = NULL;
 	long _Xp_beacon_timeoutMs = _Xp_default_beacon_timeoutMs;
@@ -199,25 +208,24 @@ private:
 	// Internal variables
 	//
 	int _LastError = XpUDP::XP_ERR_SUCCESS;
-	uint16_t _XpListenPort = 49000;
-	IPAddress _XPlaneIP;
+	static uint16_t _XpListenPort;
+	static IPAddress _XPlaneIP;
 
 	TaskHandle_t xTaskReader = NULL;
-	TaskHandle_t xTaskRefQueue = NULL;
-	TaskHandle_t xTaskCheckReceive = NULL;
 
 	_XpCommand _findCommand(byte *buffer);
 	int _ReadBeacon();
 	int _processRREF(long startTs, int noBytes);
 
 	static const int 	_UDP_MAX_PACKET_SIZE = 2048; // max size of message
-	static const int 	_UDP_MAX_PACKET_SIZE_OUT = 1024; // max size of message
+	static const int 	_UDP_MAX_PACKET_SIZE_OUT = 1500; // max size of message
 	static const int	_MAX_INTERVAL = 30 * 1000; 		// Max interval in ms between data messages
 
 	byte 		_packetBuffer[_UDP_MAX_PACKET_SIZE]; //buffer to hold incoming and outgoing packets
-	byte 		_packetBufferOut[_UDP_MAX_PACKET_SIZE_OUT]; //buffer to hold incoming and outgoing packets
+
+	static byte 		_packetBufferOut[_UDP_MAX_PACKET_SIZE_OUT]; //buffer to hold incoming and outgoing packets
 	// TODO: Check for ESP32_wifiudp ?
-	WiFiUDP 	_Udp;
+	static WiFiUDP 	_Udp;
 
 	//void(*_callbackFunc)(uint16_t canId, float par);
 	//void(*_setStateFunc)(bool state);
@@ -229,7 +237,7 @@ private:
 		xchr dref_string[400];	// dataref string with optional index [xx]
 	};
 
-	_Xp_dref_struct_in _dref_struct_in;
+	static _Xp_dref_struct_in _dref_struct_in;
 
 	struct _Xp_dref_struct_out {
 		xint dref_en;	//Where dref_en is the integer code you sent in for this dataref in the struct above.
@@ -237,16 +245,6 @@ private:
 	};
 
 	_Xp_dref_struct_out _dref_struct_out;
-
-	//Use this to set ANY data-ref by UDP! With this power, you can send in any floating-point value to any data-ref in the entire sim!
-	//Just look up the datarefs at http://www.xsquawkbox.net/.
-	//Easy!
-	//	DREF0+(4byte byte value)+dref_path+0+spaces to complete the whole message to 509 bytes
-
-	struct _Xp_dref_struct {
-		xflt var;
-		xchr dref_path[500];
-	};
 
 	//SEND A -999 FOR ANY VARIABLE IN THE SELECTION LIST THAT YOU JUST WANT TO LEAVE ALONE, OR RETURN TO DEFAULT CONTROL IN THE SIMULATOR RATHER THAN UDP OVER-RIDE.
 
@@ -268,39 +266,11 @@ private:
 
 	_Xp_becn_struct _becn_struct;
 
-	struct _DataRefs {
-		uint32_t		refID;	//Internal number of dataref
-		uint32_t		endRefID;	//Internal number of dataref
-		uint16_t		canId;
-		float			value;
-		uint8_t			frequency = 5;
-		bool			subscribed = false;
-		bool			active = true;
-		bool			isText = false;
-		unsigned long	timestamp = 0;	// last read time
-		bool			recieveOnly = true;
-		bool			internal = false;
-		int(*callback)(void* newVal);
-		_Xp_dref_struct* sendStruct = NULL;
-		XplaneTrans*	paramInfo = NULL;
-		XpUDPdataRef*	dataRef = NULL;
-	};
-
-	//
-	// a place to hold all referenced items
-	//
-	QList<_DataRefs *> _listRefs;
-	uint32_t _lastRefId = 1;
-
-	int _findDataRefById(int refId);
-	int _findDataRefByCanId(uint16_t CanId);
-	int _getDataRefInfo(_DataRefs * newRef, XplaneTrans* thisXPinfo = NULL);
+	//int _getDataRefInfo(_DataRefs * newRef, XplaneTrans* thisXPinfo = NULL);
 	int _registerNewDataRef(uint16_t canasId, bool recieveOnly, int(*callback)(void* value), XplaneTrans *newInfo);
 
-	int		sendRREF(uint32_t frequency, uint32_t refID, char * xplaneId);
-	int 	sendRREF(_DataRefs* newRef);
-
-	int		sendDREF(_DataRefs* newRef);
+	int		sendDREF(XpDataRef* newRef);
+	static void 	sendUDPdata(const char *header, const byte *dataArr, const int arrSize, const int sendSize);
 
 	// queue buffers
 	queueDataSetItem	_DataSetItem;

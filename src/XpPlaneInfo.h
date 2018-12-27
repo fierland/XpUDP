@@ -107,7 +107,8 @@ public:
 	static int setIniFile(const char* fileName);
 
 private:
-	static int _currentPlane;
+	//static int _currentPlane;
+	static bool _PlaneLoaded;
 	static char* _iniFile;
 
 	struct _planeInfo {
@@ -115,12 +116,12 @@ private:
 		unsigned long filePos;
 	};
 
-	static QList<_planeInfo *> _planeInfoItems;
+	//static QList<_planeInfo *> _planeInfoItems;
 	static QList<XplaneTrans*> _planeTranslations;
 
-	static int _readIniFile(_planeInfo* planeInfo);
-	static int _getNext(char * buffer, char terminator, char * newVal);
-	static int _scanPlanes();
-	static int _findPlane(uint16_t canID);
+	static int _readIniFile(char * planeName);
+	static char* _getNext(char * buffer, char terminator, char * newVal);
+	static char * trimQuotes(char * inStr);
+	static int _findPlaneItem(uint16_t canID);
 };
 #endif

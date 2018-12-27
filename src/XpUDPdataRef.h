@@ -3,37 +3,37 @@
 
 #include "XpPlaneInfo.h"
 #include <bitset>
+
 //==================================================================================================
 class XpUDPdataRef {
 public:
-
 	XpUDPdataRef(int refId);
-	virtual ~XpUDPdataRef();
+	virtual ~XpUDPdataRef() {};
 
 	virtual int setValue(float newValue, int index = 0) = 0;
 	virtual float getValue() const { return _value; };
-	bool isActive()  const { return _isActive; };
-	bool isChanged() const { return _isChanged; };
-	unsigned long lastTs() { return _timestamp; };
-	void setCallback(int(*callback)(void*)) { _callback = callback; };
-	bool isString()  const { return _isString; };
-	int getId() const { return _refID; };
-	XPStandardDatatypeID isDataType() { return _myDataType; };
 
+	bool isChanged() const { return _isChanged; };
+	void resetChanged() { _isChanged = false; };
+
+	unsigned long lastTs() { return _timestamp; };
+	bool isString()  const { return _isString; };
+	uint16_t getCanId() const { return _canId; };
+	XPStandardDatatypeID isDataType() { return _myDataType; };
+	void setCallback(int(*callback)(void*)) { _callback = callback; };
 protected:
-	int				_refID;	//Internal number of dataref
+	int				_refId = 0;
+	uint16_t		_canId;
 	uint8_t			_frequency = 5;
 	float			_value;
-	bool			_isActive = true;
 	unsigned long	_timestamp = 0;	// last read time
-	uint16_t		_canId = 0;
-	XplaneTrans*	_paramInfo = NULL;
 	bool			_recieveOnly = true;
-	bool			 _isChanged = false;
+	bool			_isChanged = false;
 	bool			_isString = false;
-	int(*_callback)	(void* newVal);
 	XPStandardDatatypeID _myDataType = XP_DATATYPE_FLOAT;
+	int(*_callback)(void* newVal) = NULL;
 };
+
 //==================================================================================================
 class XpUDPstringDataRef : public XpUDPdataRef {
 public:
@@ -41,7 +41,7 @@ public:
 	XpUDPstringDataRef(int refId, int size);
 	virtual ~XpUDPstringDataRef();
 	int setValue(float newValue, int index);
-	virtual char* getCurrentStrValue();
+	virtual char* getCurrentStrValue() const { return _txtValue; };
 
 #define MAXBITSET 512
 
@@ -58,13 +58,10 @@ protected:
 class XpUDPfloatDataRef : public XpUDPdataRef {
 public:
 
-	XpUDPfloatDataRef(int refId);
-	virtual ~XpUDPfloatDataRef();
+	XpUDPfloatDataRef(int refId) : XpUDPdataRef(refId) {};
+	virtual ~XpUDPfloatDataRef() {};
 	float getCurrentFloatValue()  const { return _value; };
-	virtual int setValue(float newValue, int index = 0);
-
-protected:
-	int(*_callback)(float newVal);
+	virtual int setValue(float newValue, int index = 0) { _value = newValue;	return 0; };
 };
 
 #endif

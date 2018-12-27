@@ -49,6 +49,15 @@ xflt float2xflt(float input);
 
 float xflt2float(xflt input);
 
+//Use this to set ANY data-ref by UDP! With this power, you can send in any floating-point value to any data-ref in the entire sim!
+//Just look up the datarefs at http://www.xsquawkbox.net/.
+//Easy!
+//	DREF0+(4byte byte value)+dref_path+0+spaces to complete the whole message to 509 bytes
+struct _Xp_dref_struct {
+	xflt var;
+	xchr dref_path[500];
+};
+
 //uint32_t xint2uint32(uint8_t * buf);
 
 //

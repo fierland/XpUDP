@@ -37,8 +37,16 @@ static const char *TAG = "XpUDP";
 #include "xpudp_debug.h"
 #include "XpPlaneInfo.h"
 
-#include <IniFile.h>
+#include "IniFile.h"
 
+//==================================================================================================
+// static vars
+//--------------------------------------------------------------------------------------------------
+XpUDP::_Xp_dref_struct_in XpUDP::_dref_struct_in;
+byte		XpUDP::_packetBufferOut[XpUDP::_UDP_MAX_PACKET_SIZE_OUT]; //buffer to hold incoming and outgoing packets
+WiFiUDP		XpUDP::_Udp;
+uint16_t	XpUDP::_XpListenPort = 49000;
+IPAddress	XpUDP::_XPlaneIP;
 //==================================================================================================
 // function to get info from ini file
 //[xplane]
@@ -90,8 +98,8 @@ int XpUDP::ParseIniFile(const char* iniFileName)
 
 	if (ini.getValue("xplane", "get_plane_size", buffer, bufferLen, iVal))
 	{
-		ESP_LOGD(TAG, "Set plane string size to= %d", _XpIni_plane_ini_file);
 		_XpIni_plane_string_len = iVal;
+		ESP_LOGD(TAG, "Set plane string size to= %d", _XpIni_plane_string_len);
 	}
 	else
 	{
@@ -167,36 +175,6 @@ extern "C" void taskXplane(void* parameter)
 		vTaskDelay(XP_READER_LOOP_DELAY);
 	}
 }
-//==================================================================================================
-//-------------------------------------------------------------------------------------------------
-extern "C" void taskXplaneRefQueueReader(void* parameter)
-{
-	XpUDP* xpudp;
-	ESP_LOGD(TAG, "Task taskXplaneRefQueueReader started ");
-
-	xpudp = (XpUDP*)parameter;
-	for (;;)
-	{
-		esp_task_wdt_reset();
-		xpudp->checkDataRefQueue();
-		vTaskDelay(XP_REFQUEUEREADEY_DELAY);
-	}
-}
-//==================================================================================================
-//-------------------------------------------------------------------------------------------------
-extern "C" void taskXplaneCheckReceive(void* parameter)
-{
-	XpUDP* xpudp;
-	ESP_LOGD(TAG, "Task taskXplaneCheckReceive started ");
-
-	xpudp = (XpUDP*)parameter;
-	for (;;)
-	{
-		esp_task_wdt_reset();
-		xpudp->checkReceiveData();
-		vTaskDelay(XP_REFQUEUEREADEY_DELAY);
-	}
-}
 
 //==================================================================================================
 // static vars
@@ -265,10 +243,8 @@ int XpUDP::start(int toCore)
 	ESP_LOGV(TAG, "Startting main tasks");
 
 	xTaskCreatePinnedToCore(taskXplane, "taskXPlane", 15000, this, 4, &xTaskReader, _myCore);
-	xTaskCreatePinnedToCore(taskXplaneRefQueueReader, "taskXPlaneRefQueue", 10000, this, 2, &xTaskRefQueue, _myCore);
 
 	esp_task_wdt_add(xTaskReader);
-	esp_task_wdt_add(xTaskRefQueue);
 
 	if (_RunState == XP_RUNSTATE_STOPPED)
 	{
@@ -285,7 +261,6 @@ int XpUDP::start(int toCore)
 //==================================================================================================
 int XpUDP::stop()
 {
-	vTaskDelete(xTaskRefQueue);
 	vTaskDelete(xTaskReader);
 
 	xEventGroupClearBits(s_connection_event_group, RUNNING_CONNECTED_BIT);
@@ -308,6 +283,28 @@ short XpUDP::getState()
 int XpUDP::mainTaskLoop()
 {
 	long startTs = millis();
+
+#ifdef XpUDP_TEST_ONLY
+	char* planeName = "Airfoillabs Cessna 172SP";
+
+	_lastXpConnect = millis();
+
+	switch (_RunState)
+	{
+	case XP_RUNSTATE_GOT_BEACON:
+	case XP_RUNSTATE_UDP_UP:
+	case XP_RUNSTATE_IS_CLEANING:
+	case XP_RUNSTATE_DONE_CLEANING:
+		// simulate getting plane string
+		ESP_LOGD(TAG, "Simulating getting plane name");
+		ESP_LOGD(TAG, "Plane file parse result= %d", _processPlaneIdent((void*)planeName));
+		_RunState = XP_RUNSTATE_GOT_PLANE;
+		break;
+		//default:
+
+			//ESP_LOGD(TAG, "No extra step");
+	}
+#endif
 
 	esp_task_wdt_reset();
 	switch (_RunState)
@@ -342,6 +339,7 @@ int XpUDP::mainTaskLoop()
 			_firstStart = false;
 			_RunState = XP_RUNSTATE_IS_CLEANING;
 			ESP_LOGV(TAG, "Set state to XP_RUNSTATE_IS_CLEANING");
+			_Udp.flush();
 		}
 		else
 		{
@@ -350,7 +348,8 @@ int XpUDP::mainTaskLoop()
 		}
 		break;
 	case XP_RUNSTATE_IS_CLEANING:
-		if (_Xp_initial_clean_timeoutMs < (startTs - _startCleaning))
+		//if (_Xp_initial_clean_timeoutMs < (startTs - _startCleaning))
+		if (true)  // for now cleaning not working
 		{
 			DLPRINTLN(2, "End cleaning");
 			xEventGroupClearBits(s_connection_event_group, CLEANING_CONNECTED_BIT);
@@ -359,9 +358,14 @@ int XpUDP::mainTaskLoop()
 			// ask for plane id
 			_planeInfoRec.canasId = CANAS_NOD_PLANE_NAME;
 			_planeInfoRec.xplaneId = _XpIniget_plane_dataref;
+			_planeInfoRec.stringSize = _XpIni_plane_string_len;
 			registerDataRef(&_planeInfoRec, true, _processPlaneIdent);
 		}
-		dataReader(startTs);
+		else
+		{
+			dataReader(startTs);
+			_Udp.flush();
+		}
 		break;
 	case XP_RUNSTATE_DONE_CLEANING:
 		// check UDP as long as we did not receive a valid plane name
@@ -373,8 +377,8 @@ int XpUDP::mainTaskLoop()
 		xEventGroupSetBits(s_connection_event_group, PLANE_CONNECTED_BIT | RUNNING_CONNECTED_BIT);
 		_RunState = XP_RUNSTATE_RUNNIG;
 		ESP_LOGV(TAG, "Runstate is XP_RUNSTATE_RUNNING");
-		if (xTaskCheckReceive == NULL)
-			xTaskCreatePinnedToCore(taskXplaneCheckReceive, "taskXplaneCheckReceive", 1000, this, 1, &xTaskCheckReceive, _myCore);
+		_lastXpConnect = millis();
+		_myDataRefList.checkAll(true);
 		break;
 	case XP_RUNSTATE_RUNNIG:
 		// check if we are still reiving data from XPlane
@@ -396,6 +400,13 @@ int XpUDP::mainTaskLoop()
 		ESP_LOGE(TAG, "Bad runstate :%d", _RunState);
 		break;
 	}
+
+	if (_RunState >= XP_RUNSTATE_DONE_CLEANING)
+	{
+		_myDataRefList.checkReceiveData(startTs, sendRREF);
+	}
+
+	checkDataRefQueue();
 }
 //==================================================================================================
 //	data reader for in loop() pols the udp port for new messages and dispaces them to controls
@@ -406,7 +417,6 @@ int XpUDP::dataReader(long startTs)
 {
 	int message_size = 0;
 	int noBytes = 0;
-	_DataRefs* tmpRef;
 
 	_LastError = XpUDP::XP_ERR_SUCCESS;
 
@@ -418,7 +428,7 @@ int XpUDP::dataReader(long startTs)
 		DLVARPRINTLN(5, "Packet found bytes= ", noBytes);
 		message_size = _Udp.read(_packetBuffer, noBytes); // read the packet into the buffer
 		DLVARPRINT(5, ":Packet of ", noBytes);
-		_lastXpConnect = millis();
+		_lastXpConnect = startTs;
 
 		_XpCommand thisCommand = _findCommand(_packetBuffer);
 
@@ -440,11 +450,10 @@ int XpUDP::dataReader(long startTs)
 			_processRREF(startTs, noBytes);
 			break;
 		case XP_CMD_BECN:
-			_lastXpConnect = millis();
+			_lastXpConnect = startTs;
 			break;
 		default:
-			DLPRINTLN(0, "!!Unexpexted datatype encountered:");
-			DLVARPRINTLN(0, " code:", (int)thisCommand);
+			ESP_LOGI(TAG, "!!Unexpexted datatype encountered:%d", (int)thisCommand);
 			_LastError = XpUDP::XP_ERR_NO_DATA;
 			// read the values into array
 		}
@@ -469,8 +478,10 @@ int XpUDP::_processPlaneIdent(void* newInfo)
 		ESP_LOGI(TAG, "Set state to XP_RUNSTATE_GOT_PLANE");
 		_RunState = XP_RUNSTATE_GOT_PLANE;
 		xEventGroupSetBits(s_connection_event_group, PLANE_CONNECTED_BIT);
+		// update all items
+
 		return 0;
-	};
+	}
 
 	DLPRINTINFO(2, "STOP");
 	return -1;
@@ -532,7 +543,7 @@ int XpUDP::GetBeacon(long howLong)
 	}
 
 	_LastError = XpUDP::XP_ERR_SUCCESS;
-
+	ESP_LOGD(TAG, "Search for beacon loop");
 	// wait for beacon transmision
 	do
 	{
@@ -554,7 +565,7 @@ int XpUDP::_ReadBeacon()
 
 	_LastError = XpUDP::XP_ERR_SUCCESS;
 
-	ESP_LOGV(TAG, "Search for beacon");
+	//ESP_LOGV(TAG, "Search for beacon");
 
 	noBytes = _Udp.parsePacket(); //// returns the size of the packet
 
@@ -568,7 +579,7 @@ int XpUDP::_ReadBeacon()
 		{
 			message_size = _Udp.read(_packetBuffer, noBytes); // read the packet into the buffer
 
-			if (message_size < sizeof(_becn_struct))
+			if (message_size <= sizeof(_becn_struct))
 			{
 				// copy to breacon struct and compensate byte alignment at 8th byte
 
@@ -616,7 +627,7 @@ int XpUDP::_ReadBeacon()
 			}
 			else
 			{
-				ESP_LOGE(TAG, "!!Beacon: Message size to big for struct");
+				ESP_LOGE(TAG, "!!Beacon: Message size to big for struct (%d)", sizeof(_becn_struct));
 
 				_LastError = XpUDP::XP_ERR_BUFFER_OVERFLOW;
 			}
@@ -630,7 +641,7 @@ int XpUDP::_ReadBeacon()
 	}
 	else
 	{
-		ESP_LOGI(TAG, "Beacon: Nothing to read, beacon not found");
+		//ESP_LOGV(TAG, "Beacon: Nothing to read, beacon not found");
 		_LastError = XpUDP::XP_ERR_BEACON_NOT_FOUND;
 	}
 	// everything ok :-)
@@ -671,57 +682,17 @@ _XpCommand XpUDP::_findCommand(byte *buffer)
 	DLPRINTINFO(1, "STOP");
 	return XP_CMD_XXXX;
 }
+
 //==================================================================================================
-//==================================================================================================
-int XpUDP::_findDataRefById(int refId)
-{
-	_DataRefs *tmpRef;
-	DLPRINTINFO(4, "START");
-
-	DLVARPRINTLN(4, "items in list:", _listRefs.size());
-
-	for (int i = 0; i < _listRefs.size(); i++)
-	{
-		tmpRef = _listRefs[i];
-		if ((tmpRef->refID <= refId) && (tmpRef->endRefID >= refId))
-		{
-			return i;
-			break;
-		}
-	}
-	return -XP_ERR_NOT_FOUND;
-	DLPRINTINFO(4, "STOP");
-}
-int XpUDP::_findDataRefByCanId(uint16_t CanId)
-{
-	_DataRefs *tmpRef;
-	DLPRINTINFO(4, "START");
-
-	DLVARPRINTLN(4, "items in list:", _listRefs.size());
-
-	for (int i = 0; i < _listRefs.size(); i++)
-	{
-		tmpRef = _listRefs[i];
-		if (tmpRef->canId == CanId)
-		{
-			return i;
-			break;
-		}
-	}
-	return -XP_ERR_NOT_FOUND;
-	DLPRINTINFO(4, "STOP");
-}
-;
-//==================================================================================================
-// proccess a RREF command and send uopdated values to CANBUS manager
+// proccess a RREF command and send updated values to CANBUS manager
 // TODO: parse string if needed
 // TODO: special action on certain info records
 //==================================================================================================
 int XpUDP::_processRREF(long startTs, int noBytes)
 {
 	int curRecord = -1;
-	_DataRefs* tmpRef;
-	_DataRefs* curRef = NULL;
+	XpDataRef* tmpRef;
+	XpDataRef* curRef = NULL;
 
 	DLPRINTLN(5, "Start processing RREF");
 	delay(10);
@@ -741,46 +712,45 @@ int XpUDP::_processRREF(long startTs, int noBytes)
 		float value = xflt2float(_dref_struct_out.dref_flt);
 		uint32_t en = xint2uint(_dref_struct_out.dref_en);
 
-		ESP_LOGV(TAG, "XPlane Received (native) RREF=%d value=%d (%c)", en, value, value);
+		ESP_LOGV(TAG, "XPlane Received (native) RREF=%d value=%f [%c]", en, value, value);
 
 		if (en != 0)
 		{
 			DLPRINT(5, "Ask for semaphore");
-			while (xSemaphoreTake(xSemaphoreRefs, (TickType_t)10) != pdTRUE); // wait for semaphore
+			while (xSemaphoreTake(xSemaphoreRefs, (TickType_t)1000) != pdTRUE); // wait for semaphore
 			DLPRINT(5, "Got semaphore");
 
 			// check if we know the dataref number
-			int i = _findDataRefById(en);
+			curRef = _myDataRefList.findById(en);
 
 			// process data
-			if (i > -1 && _listRefs[i]->subscribed && _RunState >= XP_RUNSTATE_DONE_CLEANING)
+			if (_RunState >= XP_RUNSTATE_DONE_CLEANING && curRef != NULL && curRef->subscribed)
 			{
-				curRef = _listRefs[i];
+				ESP_LOGV(TAG, "Setting item %d to value=%f", curRef->refID, value);
 
-				assert(curRef->dataRef != NULL);
-
-				if (!curRef->isText)
+				if (!curRef->dataRef->isString())
 				{
-					curRef->timestamp = millis();
+					curRef->timestamp = startTs;
+
 					DLPRINT(5, "not text");
 
-					if (true) //(curRef->value != value)
+					if (curRef->dataRef->getValue() != value)
 					{
-						ESP_LOGD(TAG, "XPlane Updating value of %d from %d to %d", curRef->canId, curRef->dataRef->getValue(), value);
+						ESP_LOGD(TAG, "XPlane Updating value of %d from %f to %f", curRef->canId, curRef->dataRef->getValue(), value);
 
 						// TODO: Call to update function
 						// canid's < 200 are usd for info only relevant to XpUDP interface like plane name
-						if (curRef->paramInfo->canasId > 200)
+						if (curRef->canId > 200)
 						{
-							_DataItem.canId = curRef->paramInfo->canasId;
+							_DataItem.canId = curRef->canId;
 							_DataItem.value = value;
 							if (xQueueSendToBack(xQueueRREF, &_DataItem, 10) != pdPASS)
 							{
 								ESP_LOGE(TAG, "Error posting RREF to queue");
 							}
 						}
+						curRef->dataRef->setValue(value);
 					}
-					curRef->dataRef->setValue(value);
 				}
 				else
 				{
@@ -790,9 +760,10 @@ int XpUDP::_processRREF(long startTs, int noBytes)
 
 					if (curRef->dataRef->isChanged())
 					{
-						curRef->timestamp = millis();
+						curRef->timestamp = startTs;
 						ESP_LOGD(TAG, "String done");
 						// TODO:if changed
+						curRef->dataRef->resetChanged();
 					}
 					//ESP_LOGD(TAG, "XPlane Updating string value of %d to :%s:", curRef->canId, ((XpUDPstringDataRef*)curRef->dataRef)->getCurrentStrValue());
 				}
@@ -802,7 +773,7 @@ int XpUDP::_processRREF(long startTs, int noBytes)
 				// not found in subscription list so sign out of a RREF
 				ESP_LOGD(TAG, "!!Code not found in subscription list or cleaning up, signing out of RREF:%d", en);
 				sendRREF(0, en, "");
-				//if (_RunState = XP_RUNSTATE_IS_CLEANING) _startCleaning = millis();
+				if (_RunState = XP_RUNSTATE_IS_CLEANING) _startCleaning = startTs;
 			}
 
 			DLPRINT(5, "Release semaphore");
@@ -810,31 +781,6 @@ int XpUDP::_processRREF(long startTs, int noBytes)
 		}
 	}
 }
-//==================================================================================================
-// TODO: create task :-)
-//==================================================================================================
-
-int XpUDP::checkDREFQueue()
-{
-	int curRec;
-
-	while (xQueueReceive(xQueueDREF, &_DataItem, 0) == pdTRUE)
-	{
-		if (xSemaphoreTake(xSemaphoreRefs, (TickType_t)10) == pdTRUE)
-		{
-			curRec = _findDataRefByCanId(_DataItem.canId);
-			if (curRec != -XP_ERR_NOT_FOUND)
-			{
-				_listRefs[curRec]->value = _DataItem.value;
-				_listRefs[curRec]->timestamp = millis();
-				sendDREF(_listRefs[curRec]);
-			}
-			xSemaphoreGive(xSemaphoreRefs);
-		}
-	};
-
-	return 0;
-};
 
 //==================================================================================================
 // TODO: create task :-)
@@ -853,171 +799,41 @@ int XpUDP::checkDataRefQueue()
 	return 0;
 };
 
-//==================================================================================================
-	// now loop to check if we are receiving all data
-	// TODO: make task
-//--------------------------------------------------------------------------------------------------
-int XpUDP::checkReceiveData()
-{
-	_DataRefs* tmpRef;
-
-	DLPRINT(6, "check receive loop");
-
-	if (_RunState >= XP_RUNSTATE_DONE_CLEANING)
-	{
-		unsigned long timeNow = millis();
-		if (xSemaphoreTake(xSemaphoreRefs, (TickType_t)10) == pdTRUE)
-		{
-			for (int i = 0; i < _listRefs.size(); i++)
-			{
-				tmpRef = _listRefs[i];
-
-				// check if we have a info record
-				if (tmpRef->paramInfo == NULL)
-				{
-					_getDataRefInfo(tmpRef);
-					ESP_LOGD(TAG, "Stack high wateer =%d", uxTaskGetStackHighWaterMark(NULL));
-				}
-
-				if (tmpRef->active && (tmpRef->paramInfo != NULL) && ((timeNow - tmpRef->dataRef->lastTs()) > _MAX_INTERVAL))
-				{
-					ESP_LOGD(TAG, "!!Item not receiving data (resend RREF):%d interval=%d now=%d ts=%d",
-						i, _MAX_INTERVAL, timeNow, tmpRef->timestamp);
-
-					sendRREF(tmpRef);
-					tmpRef->timestamp = timeNow;
-					break;
-				}
-			}
-			xSemaphoreGive(xSemaphoreRefs);
-		}
-	}
-}
-
 //--------------------------------------------------------------------------------------------------
 //
 //--------------------------------------------------------------------------------------------------
-
-//==================================================================================================
-//==================================================================================================
-int XpUDP::_getDataRefInfo(_DataRefs* newRef, XplaneTrans* thisXPinfo)
-{
-	DLPRINTINFO(4, "START");
-
-	if (newRef->paramInfo == NULL)
-	{
-		XplaneTrans* curXPinfo = NULL;
-		// find record
-		if (thisXPinfo == NULL)
-		{
-			if (_isRunnig) 	curXPinfo = XpPlaneInfo::fromCan2XplaneElement(newRef->canId);
-		}
-		else
-			curXPinfo = thisXPinfo;
-
-		newRef->paramInfo = curXPinfo;
-	}
-
-	if (newRef->paramInfo != NULL)
-	{
-		newRef->frequency = newRef->paramInfo->xpTimesSecond;
-		if (newRef->paramInfo->xpDataType == XP_DATATYPE_STRING)
-		{
-			newRef->endRefID += newRef->paramInfo->stringSize;
-			_lastRefId = newRef->endRefID + 1;
-			newRef->isText = true;
-		}
-		DLVARPRINT(1, "startRef:", newRef->refID);
-		DLVARPRINTLN(1, ":endRef:", newRef->endRefID);
-
-		if (newRef->dataRef == NULL)
-		{
-			ESP_LOGD(TAG, "Adding new dataref for %d", newRef->canId);
-
-			if (newRef->paramInfo->xpDataType == XP_DATATYPE_STRING)
-			{
-				DLPRINTLN(1, "adding string");
-				newRef->dataRef = new XpUDPstringDataRef(newRef->refID, newRef->paramInfo->stringSize);
-			}
-			else
-			{
-				DLPRINTLN(1, "adding var");
-				newRef->dataRef = new XpUDPfloatDataRef(newRef->refID);
-			}
-			if (newRef->callback != NULL)
-				newRef->dataRef->setCallback(newRef->callback);
-		}
-
-		if (!newRef->recieveOnly)
-		{
-			newRef->sendStruct = (_Xp_dref_struct*)malloc(sizeof(_Xp_dref_struct));
-			strcpy(newRef->sendStruct->dref_path, newRef->paramInfo->xplaneId);
-		}
-	}
-	else
-	{
-		ESP_LOGE(TAG, "STOP no dataref info found for %d", newRef->canId);
-		return -1;
-	}
-
-	DLPRINTINFO(4, "STOP");
-	return 0;
-}
 //==================================================================================================
 int XpUDP::_registerNewDataRef(uint16_t canasId, bool recieveOnly, int(*callback)(void* value), XplaneTrans *newInfo)
 {
 	int curRecord = -1;
-	_DataRefs* newRef = NULL;
+	XpDataRef* newRef = NULL;
 
 	DLPRINTINFO(4, "START");
+	ESP_LOGD(TAG, "Start registering dref %d", canasId);
 
 	// check if struct is free to manipulate
 	while (xSemaphoreTake(xSemaphoreRefs, (TickType_t)10) != pdTRUE);
 
-	for (int i = 0; i < _listRefs.size(); i++)
-	{
-		newRef = _listRefs[i];
-		if (newRef->canId == canasId)
-		{
-			curRecord = i;
-			break;
-		}
-	}
+	newRef = _myDataRefList.findByCanId(canasId, true);
 
-	if (curRecord == -1)  // not found in list
+	if (newRef == NULL)  // not found in list
 	{
 		//not found so create new item
 		ESP_LOGV(TAG, "Registering dataref: %d", canasId);
-
-		newRef = new _DataRefs;
-
-		_listRefs.push_back(newRef);
-		newRef->refID = _lastRefId++;
-		newRef->endRefID = newRef->refID;
-		newRef->canId = canasId;
-		newRef->paramInfo = newInfo;
+		ESP_LOGV(TAG, "newinfo ? %s", (newInfo == NULL) ? "NULL" : "VALUE");
+		newRef = _myDataRefList.addNew(canasId, recieveOnly, callback, newInfo);
 	}
 	else
 	{
 		// found a record so update item
 		DLPRINT(1, "existing reccord");
-		newRef = _listRefs[curRecord];
 	}
 
-	newRef->active = true;
-
-	newRef->recieveOnly = recieveOnly;
-	if (callback != NULL)
-		newRef->callback = callback;
-
-	DLVARPRINTLN(4, "infoRecord=", (newInfo == NULL) ? 0 : 1);
-
-	_getDataRefInfo(newRef);
-
-	if (newRef->dataRef == NULL) DLPRINTLN(2, "NO DATAREF");
+	newRef->isRREF = recieveOnly;
 
 	// check if active and for last timestamp
-	if (_RunState >= XP_RUNSTATE_DONE_CLEANING && (newRef->paramInfo != NULL) && (newRef->recieveOnly) && (!newRef->subscribed || (millis() - newRef->timestamp) > _MAX_INTERVAL))
+	if (_RunState >= XP_RUNSTATE_DONE_CLEANING && (newRef->paramInfo != NULL) && (newRef->isRREF) &&
+		(!newRef->isActive || (millis() - newRef->timestamp) > _MAX_INTERVAL))
 	{
 		// create new request
 		DLPRINTLN(1, "create x-plane request");
@@ -1033,7 +849,6 @@ int XpUDP::_registerNewDataRef(uint16_t canasId, bool recieveOnly, int(*callback
 	}
 
 	xSemaphoreGive(xSemaphoreRefs);
-	DLPRINTINFO(4, "STOP");
 
 	return (newRef != NULL) ? XP_ERR_SUCCESS : -XP_ERR_FAILED;
 }
@@ -1074,101 +889,93 @@ int XpUDP::registerDataRef(uint16_t canasId, bool recieveOnly, int(*callback)(vo
 }
 
 //==================================================================================================
+// TODO: create task :-)
+//==================================================================================================
+
+int XpUDP::checkDREFQueue()
+{
+	XpDataRef* curRec;
+
+	while (xQueueReceive(xQueueDREF, &_DataItem, 0) == pdTRUE)
+	{
+		if (xSemaphoreTake(xSemaphoreRefs, (TickType_t)10) == pdTRUE)
+		{
+			curRec = _myDataRefList.findByCanId(_DataItem.canId);
+
+			if (curRec != NULL && curRec->dataRef != NULL)
+			{
+				curRec->dataRef->setValue(_DataItem.value);
+
+				sendDREF(curRec);
+			}
+			xSemaphoreGive(xSemaphoreRefs);
+		}
+	};
+
+	return 0;
+};
+//==================================================================================================
+//--------------------------------------------------------------------------------------------------
+int XpUDP::_unRegisterDataRefItem(uint16_t canId)
+{
+	XpDataRef* tmpRef;
+
+	tmpRef = _myDataRefList.unRegister(canId);
+
+	if (tmpRef != NULL)
+	{
+		ESP_LOGV(TAG, "Unregister dataref: %d", tmpRef->canId);
+
+		if (tmpRef->dataRef->isString())
+		{
+			for (int j = tmpRef->refID; j <= tmpRef->endRefID; j++)
+				sendRREF(0, j, "");
+		}
+		else
+			sendRREF(0, tmpRef->refID, "");
+	}
+
+	return 0;
+}
+//==================================================================================================
+// cheeck if we need semaphore
 //--------------------------------------------------------------------------------------------------
 int XpUDP::unRegisterDataRef(uint16_t canID)
 {
-	bool notFound = true;
-	int curRecord = -1;
-	_DataRefs* tmpRef;
-
-	DLPRINTINFO(2, "START");
-	DLVARPRINTLN(1, "Unregister request for:", canID);
+	int result;
 
 	while (xSemaphoreTake(xSemaphoreRefs, (TickType_t)10) != pdTRUE);
 
-	DLVARPRINTLN(1, "checking #items:", _listRefs.size());
+	result = _unRegisterDataRefItem(canID);
 
-	// first test if we have the item.
-	for (int i = 0; notFound && (i < _listRefs.size()); i++)
-	{
-		tmpRef = _listRefs[i];
-
-		assert(tmpRef != NULL);
-
-		DLVARPRINTLN(2, "check:", tmpRef->canId);
-
-		if (tmpRef->canId == canID)
-		{
-			DLVARPRINTLN(2, "found:", i);
-
-			notFound = false;
-			curRecord = i;
-			tmpRef->active = false;
-			tmpRef->subscribed = false;
-			tmpRef->frequency = (uint8_t)0;
-			ESP_LOGV(TAG, "Unregister dataref: %d", tmpRef->canId);
-
-			if (tmpRef->isText)
-			{
-				for (int j = tmpRef->refID; j <= tmpRef->endRefID; j++)
-					sendRREF(0, j, "");
-			}
-			else
-				sendRREF(tmpRef);
-			DLPRINTLN(1, "removing datarefs");
-			if (tmpRef->dataRef != NULL)
-			{
-				delete tmpRef->dataRef;
-				tmpRef->dataRef = NULL;
-			}
-
-			if (tmpRef->sendStruct != NULL) free(tmpRef->sendStruct);
-
-			break;
-		}
-		else
-		{
-			DLVARPRINTLN(2, "Skip:", i);
-		}
-	}
 	xSemaphoreGive(xSemaphoreRefs);
-	DLPRINTINFO(2, "STOP");
-	return 0;
+
+	return result;
 }
 ///==================================================================================================
 // send a updat to a xref to x-plane
+// TODO: update string and array values
 ///==================================================================================================
 int XpUDP::setDataRefValue(uint16_t canID, float value)
 {
 	// TODO: Code send data to Xplane
-	_DataRefs* tmpRef;
-	int curRecord = -1;
-	DLPRINTINFO(2, "START");
+	XpDataRef* tmpRef;
 
 	// first test if we have the item.
-	for (int i = 0; i < _listRefs.size(); i++)
-	{
-		tmpRef = _listRefs[i];
-		if (tmpRef->canId == canID)
-		{
-			curRecord = i;
-			break;
-		}
-	}
+	tmpRef = _myDataRefList.findByCanId(canID);
 
-	if (curRecord != -1)
+	if (tmpRef != NULL)
 	{
-		tmpRef->value = value;
-		DLVARPRINT(1, "Send update Data ref", canID); DLVARPRINTLN(1, ":", value);
+		tmpRef->dataRef->setValue(value);
+		ESP_LOGV(TAG, "Update Data ref %d to %d", canID, value);
 		sendDREF(tmpRef);
 	}
 	else
 	{
-		DLPRINTLN(0, "!! Data ref not found for updating to xPlane");
+		ESP_LOGE(TAG, "!! Data ref %d not found for updating to xPlane", canID);
 		return -1;
 	}
 
-	DLPRINTINFO(2, "STOP");
 	return 0;
 }
 
@@ -1187,27 +994,28 @@ int XpUDP::sendRREF(uint32_t frequency, uint32_t refID, char* xplaneId)
 	_dref_struct_in.dref_en = uint2xint(refID);
 	strcpy(_dref_struct_in.dref_string, xplaneId);
 
-	DLVARPRINT(2, "XPlane Send (udp)    RREF=", _dref_struct_in.dref_en);
-	DLVARPRINTLN(2, " FREQ=", _dref_struct_in.dref_freq);
-	DLVARPRINT(2, "XPlane Send (native) RREF=", refID);
-	DLVARPRINT(2, " FREQ=", frequency);
-	DLVARPRINTLN(2, "Element=", xplaneId);
+	ESP_LOGV(TAG, "sendRREF:%d:%d:%s:", _dref_struct_in.dref_freq, _dref_struct_in.dref_en, _dref_struct_in.dref_string);
+#ifdef XpUDP_TEST_ONLY
 
+	ESP_LOGD(TAG, "DUMMYSEND %s", _dref_struct_in.dref_string);
+#else
 	sendUDPdata(XPMSG_RREF, (byte *)&_dref_struct_in, sizeof(_dref_struct_in), _Xp_dref_in_msg_size);
+#endif
 }
 //==================================================================================================
 //==================================================================================================
-int XpUDP::sendRREF(_DataRefs* newRef)
+int XpUDP::sendRREF(XpDataRef* newRef)
 {
-	assert(newRef->paramInfo != NULL);
-
-	if (!newRef->active)
+	if (newRef->paramInfo == NULL)
 		return -1;
 
-	ESP_LOGD(TAG, "requesting Canid :%d: freq %d Xref:%s:", newRef->paramInfo->xplaneId,
-		newRef->frequency, newRef->paramInfo->xplaneId);
+	if (!newRef->isActive)
+		return -1;
 
-	if (newRef->isText)
+	ESP_LOGD(TAG, "requesting dref :%d:%d: freq %d Xref:%s:", newRef->canId, newRef->refID,
+		newRef->paramInfo->xpTimesSecond, newRef->paramInfo->xplaneId);
+
+	if (newRef->dataRef->isString())
 	{
 		char newTxt[400];
 		char counter[6];
@@ -1216,28 +1024,28 @@ int XpUDP::sendRREF(_DataRefs* newRef)
 		ESP_LOGD(TAG, "RREF send txt range:%d to %d", newRef->refID, newRef->endRefID);
 
 		size = newRef->endRefID - newRef->refID;
-		DLVARPRINTLN(4, ":size:", size);
 
 		strcpy(newTxt, newRef->paramInfo->xplaneId);
 		strSize = strlen(newRef->paramInfo->xplaneId);
-		newTxt[strSize] = '[';
+		newTxt[strSize++] = '[';
 
 		for (int i = 0; i < size; i++)
 		{
 			esp_task_wdt_reset();
-			newTxt[strSize + 1] = '\0';
+			newTxt[strSize] = '\0';
 			itoa(i, counter, 10);
 			strcat(newTxt, counter);
 			strcat(newTxt, "]");
-			ESP_LOGD(TAG, "requesting Xref:%s:", newTxt)
-				sendRREF(newRef->frequency, newRef->refID + i, newTxt);
-			if ((size % 100) == 0) delay(100);
+			ESP_LOGV(TAG, "requesting Xref:%s:", newTxt);
+
+			sendRREF(newRef->paramInfo->xpTimesSecond, newRef->refID + i, newTxt);
+			if ((size % 50) == 0) delay(100);
 		}
 	}
 	else
 	{
 		DLPRINTLN(4, "RREF send var");
-		sendRREF(newRef->frequency, newRef->refID, newRef->paramInfo->xplaneId);
+		sendRREF(newRef->paramInfo->xpTimesSecond, newRef->refID, newRef->paramInfo->xplaneId);
 	}
 	newRef->subscribed = true;
 
@@ -1246,11 +1054,13 @@ int XpUDP::sendRREF(_DataRefs* newRef)
 
 //==================================================================================================
 //==================================================================================================
-int XpUDP::sendDREF(_DataRefs * newRef)
+int XpUDP::sendDREF(XpDataRef * newRef)
 {
-	newRef->sendStruct->var = newRef->value;
+	assert(newRef->sendStruct != NULL);
 
-	DLVARPRINT(4, "#SEND DREF:", newRef->refID); DLPRINTLN(1, newRef->value);
+	newRef->sendStruct->var = newRef->dataRef->getValue();
+
+	ESP_LOGD(TAG, "#SEND DREF:%d value=%d", newRef->refID, newRef->dataRef->getValue());
 
 	sendUDPdata(XPMSG_DREF, (byte *)&(newRef->sendStruct), sizeof(_Xp_dref_struct), _Xp_dref_size);
 	return 0;

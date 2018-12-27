@@ -11,16 +11,11 @@ static const char *TAG = "XpUDPdataRef";
 XpUDPdataRef::XpUDPdataRef(int refId)
 {
 	DLPRINTINFO(2, "START");
-	_refID = refId;
+	_refId = refId;
 	_timestamp = millis();
 	DLPRINTINFO(2, "STOP");
 }
 
-//==================================================================================================
-//==================================================================================================
-
-XpUDPdataRef::~XpUDPdataRef()
-{}
 //==================================================================================================
 //==================================================================================================
 
@@ -43,8 +38,8 @@ XpUDPstringDataRef::XpUDPstringDataRef(int refId, int size) : XpUDPdataRef(refId
 	assert(size <= MAXBITSET);
 
 	_isString = true;
-	_txtValue = (char*)malloc(size + 1);
-	_newText = (char*)malloc(size + 1);
+	_txtValue = (char*)calloc(1, size + 1);
+	_newText = (char*)calloc(1, size + 1);
 	memset(_newText, 0, _strSize);
 	_txtValue[0] = '\0';
 	_newText[0] = '\0';
@@ -55,6 +50,8 @@ XpUDPstringDataRef::XpUDPstringDataRef(int refId, int size) : XpUDPdataRef(refId
 	_gotBit.reset();
 	for (int i = 0; i < _strSize; i++) _gotBit.set(i);
 
+	ESP_LOGD(TAG, "created new string statref for %d size=%d", refId, _strSize);
+
 	DLPRINTINFO(2, "STOP");
 }
 
@@ -62,10 +59,8 @@ XpUDPstringDataRef::XpUDPstringDataRef(int refId, int size) : XpUDPdataRef(refId
 //==================================================================================================
 XpUDPstringDataRef::~XpUDPstringDataRef()
 {
-	DLPRINTINFO(2, "START");
 	if (_txtValue != NULL)	free(_txtValue);
 	if (_newText != NULL)	free(_newText);
-	DLPRINTINFO(2, "STOP");
 }
 
 //==================================================================================================
@@ -79,11 +74,13 @@ int XpUDPstringDataRef::setValue(float newValue, int index)
 	ESP_LOGV(TAG, "String =:%s:", _newText);
 
 	// all items received for a string
-	if (_gotBit.count() < 5)
-	{
-		Serial.println((char*)_gotBit.to_string().c_str());
-	}
-	//ESP_LOGD(TAG, "Current bitmask:%s:", _gotBit.to_string());
+//#if (DEBUG_LEVEL > LOG_DEBUG)
+//	if (_gotBit.count() < 20)
+//	{
+//		Serial.println((char*)_gotBit.to_string().c_str());
+//	}
+//	//ESP_LOGD(TAG, "Current bitmask:%s:", _gotBit.to_string());
+//#endif
 
 	if (!_gotBit.any())
 	{
@@ -103,7 +100,7 @@ int XpUDPstringDataRef::setValue(float newValue, int index)
 
 		if (_callback != NULL)
 		{
-			_callback((void*)_txtValue);
+			if (!_callback((void*)_txtValue) != 0) _isChanged = false;
 		}
 	}
 
@@ -112,23 +109,3 @@ int XpUDPstringDataRef::setValue(float newValue, int index)
 
 //==================================================================================================
 //==================================================================================================
-char * XpUDPstringDataRef::getCurrentStrValue()
-{
-	return _txtValue;
-}
-
-//==================================================================================================
-//==================================================================================================
-//==================================================================================================
-//==================================================================================================
-XpUDPfloatDataRef::XpUDPfloatDataRef(int refId) : XpUDPdataRef(refId)
-{}
-
-XpUDPfloatDataRef::~XpUDPfloatDataRef()
-{}
-
-int XpUDPfloatDataRef::setValue(float newValue, int index)
-{
-	_value = newValue;
-	return 0;
-}

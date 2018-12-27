@@ -1,9 +1,9 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Label="Globals">
     <MSBuildAllProjects>$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
     <HasSharedItems>true</HasSharedItems>
-    <ItemsProjectGuid>{afe0ca10-6bf8-4be1-a0b0-00a24b33d86e}</ItemsProjectGuid>
+    <ItemsProjectGuid>{43ae4975-fc49-442a-a21b-495297661556}</ItemsProjectGuid>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
@@ -14,26 +14,14 @@
     <ProjectCapability Include="SourceItemsFromImports" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\XpPlaneInfo.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\XpUDP.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\XpUDPdataRef.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\XPUtils.cpp" />
+    <Text Include="$(MSBuildThisFileDirectory)readme.txt" />
+	<Text Include="$(MSBuildThisFileDirectory)library.properties" />
+  	<Text Include="$(MSBuildThisFileDirectory)XpUDP.h" />
+  </ItemGroup>
+ <ItemGroup>
+    <!-- <ClInclude Include="$(MSBuildThisFileDirectory)XpUDP.h" /> -->
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\GenericDefs.h" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\XpPlaneInfo.h" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\XpUDP.h" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\XpUDPdataRef.h" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\xpudp_debug.h" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\XPUtils.h" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)XpUDP.cpp" />
   </ItemGroup>
-  <ItemGroup>
-    <Text Include="$(MSBuildThisFileDirectory)library.properties" />
-    <Text Include="$(MSBuildThisFileDirectory)vs-readme.txt" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="$(MSBuildThisFileDirectory).gitignore" />
-    <None Include="$(MSBuildThisFileDirectory)LICENSE" />
-    <None Include="$(MSBuildThisFileDirectory)README.md" />
-  </ItemGroup>
-</Project>
+  </Project>
