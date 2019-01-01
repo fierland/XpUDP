@@ -91,6 +91,7 @@ typedef enum _XpCommand {
 };
 
 typedef enum _XpRunStates {
+	XP_RUNSTATE_STOPPED,
 	XP_RUNSTATE_BAD_INIT,
 	XP_RUNSTATE_INIT,
 	XP_RUNSTATE_WIFI_UP,
@@ -99,7 +100,6 @@ typedef enum _XpRunStates {
 	XP_RUNSTATE_IS_CLEANING,
 	XP_RUNSTATE_DONE_CLEANING,
 	XP_RUNSTATE_GOT_PLANE,
-	XP_RUNSTATE_STOPPED,
 	XP_RUNSTATE_RUNNIG
 };
 
@@ -139,7 +139,8 @@ public:
 		XP_ERR_FAILED = 8,
 		XP_ERR_NOT_FOUND,
 		XP_ERR_BAD_INITFILE,
-		XP_ERR_BAD_RUNSTATE
+		XP_ERR_BAD_RUNSTATE,
+		XP_ERR_IS_RUNNING
 	} XpErrorCode;
 
 	//constructor
@@ -179,7 +180,7 @@ protected:
 	static int _processPlaneIdent(void * newInfo);
 
 	int		_startUDP();
-	int 	GetBeacon(long howLong = XP_BEACONTIMEOUT_MS);
+	int 	GetBeacon(long startTs, long howLong = XP_BEACONTIMEOUT_MS);
 
 	static short 	 _RunState;
 #define _gotPlaneId  (_RunState>=XP_RUNSTATE_GOT_PLANE)
@@ -214,7 +215,7 @@ private:
 	TaskHandle_t xTaskReader = NULL;
 
 	_XpCommand _findCommand(byte *buffer);
-	int _ReadBeacon();
+	int _ReadBeacon(long startTs);
 	int _processRREF(long startTs, int noBytes);
 
 	static const int 	_UDP_MAX_PACKET_SIZE = 2048; // max size of message

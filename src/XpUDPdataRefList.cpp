@@ -49,7 +49,7 @@ XpDataRef* XpUDPdataRefList::addNew(uint16_t canID, bool isRREF, int(*callback)(
 //--------------------------------------------------------------------------------------------------
 void XpUDPdataRefList::checkAll(bool newPlane)
 {
-	for (int i = 1; i < _listRefs.length(); i++)
+	for (int i = 0; i < _listRefs.length(); i++)
 	{
 		if (_listRefs[i]->isActive && (newPlane || (_listRefs[i]->paramInfo == NULL)))
 		{
@@ -78,6 +78,8 @@ void XpUDPdataRefList::_getTrans(XpDataRef* myRef, bool newPlane, XplaneTrans *n
 		ESP_LOGV(TAG, "Adding param");
 
 		myRef->refID = _lastRefId++;
+		myRef->endRefID = myRef->refID;
+
 		if (!myRef->isRREF)
 		{
 			ESP_LOGV(TAG, "Adding ading receive info");
@@ -121,16 +123,20 @@ void XpUDPdataRefList::_getTrans(XpDataRef* myRef, bool newPlane, XplaneTrans *n
 XpDataRef* XpUDPdataRefList::findById(int refId, bool checkAll)
 {
 	XpDataRef *tmpRef;
+	ESP_LOGV(TAG, "Searching for dataref %d", refId);
 
 	for (int i = 0; i < _listRefs.size(); i++)
 	{
 		tmpRef = _listRefs[i];
+		//ESP_LOGV(TAG, "checking %d-%d status %s", tmpRef->refID, tmpRef->endRefID, (tmpRef->isActive ? "ACTIVE" : "NONACT"));
 		if ((tmpRef->isActive || checkAll) && (tmpRef->refID <= refId) && (tmpRef->endRefID >= refId))
 		{
+			ESP_LOGV(TAG, "FOUND");
 			return tmpRef;
 			break;
 		}
 	}
+
 	return NULL;
 }
 
@@ -235,24 +241,25 @@ int XpUDPdataRefList::checkReceiveData(long timeNow, int(*sendRREF)(XpDataRef* n
 	for (int i = 0; i < _listRefs.size(); i++)
 	{
 		tmpRef = _listRefs[i];
-
-		// check if we have a info record
-		if (tmpRef->paramInfo == NULL)
+		if (tmpRef->isActive)
 		{
-			_getTrans(tmpRef);
-		}
+			// check if we have a info record
+			if (tmpRef->paramInfo == NULL)
+			{
+				_getTrans(tmpRef);
+			}
 
-		ESP_LOGV(TAG, "%d: %s active paramInfo=%s last=%d", tmpRef->canId, (tmpRef->isActive) ? "Is" : "not",
-			(tmpRef->paramInfo != NULL) ? "OK" : "NULL", tmpRef->timestamp);
+			ESP_LOGV(TAG, "%d [%d-%d]: %s active paramInfo=%s last=%d", tmpRef->canId, tmpRef->refID, tmpRef->endRefID, (tmpRef->isActive) ? "Is" : "not",
+				(tmpRef->paramInfo != NULL) ? "OK" : "NULL", tmpRef->timestamp);
 
-		if (tmpRef->isActive && (tmpRef->paramInfo != NULL) &&
-			((timeNow - tmpRef->timestamp) > _MAX_INTERVAL))
-		{
-			ESP_LOGD(TAG, "!!Item not receiving data (resend RREF):%d interval=%d now=%d ts=%d",
-				i, _MAX_INTERVAL, timeNow, tmpRef->timestamp);
+			if ((tmpRef->paramInfo != NULL) && ((timeNow - tmpRef->timestamp) > _MAX_INTERVAL))
+			{
+				ESP_LOGD(TAG, "!!Item not receiving data (resend RREF):%d interval=%d now=%d ts=%d",
+					i, _MAX_INTERVAL, timeNow, tmpRef->timestamp);
 
-			sendRREF(tmpRef);
-			tmpRef->timestamp = timeNow;
+				sendRREF(tmpRef);
+				tmpRef->timestamp = timeNow;
+			}
 		}
 	}
 }

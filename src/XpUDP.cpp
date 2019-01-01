@@ -92,7 +92,7 @@ int XpUDP::ParseIniFile(const char* iniFileName)
 	else
 	{
 		//printErrorMessage(ini.getError());
-		ESP_LOGE(TAG, "Can not get info from file. Err= %d", ini.getError());
+		ESP_LOGE(TAG, "Can not get get_plane_info from file. Err= %d", ini.getError());
 		result = -1;
 	}
 
@@ -104,7 +104,7 @@ int XpUDP::ParseIniFile(const char* iniFileName)
 	else
 	{
 		//printErrorMessage(ini.getError());
-		ESP_LOGE(TAG, "Can not get info from file. Err= %d", ini.getError());
+		ESP_LOGE(TAG, "Can not get get_plane_size from file. Err= %d", ini.getError());
 		result = -1;
 	}
 
@@ -122,7 +122,7 @@ int XpUDP::ParseIniFile(const char* iniFileName)
 	}
 	else
 	{
-		ESP_LOGE(TAG, "Can not get info from file. Err= %d", ini.getError());
+		ESP_LOGE(TAG, "Can not get udp_ip from file. Err= %d", ini.getError());
 		result = -1;
 	}
 
@@ -134,7 +134,7 @@ int XpUDP::ParseIniFile(const char* iniFileName)
 	else
 	{
 		//printErrorMessage(ini.getError());
-		ESP_LOGE(TAG, "Can not get info from file. Err= %d", ini.getError());
+		ESP_LOGE(TAG, "Can not get upd_port from file. Err= %d", ini.getError());
 		result = -1;
 	}
 
@@ -230,10 +230,10 @@ int XpUDP::start(int toCore)
 		if (_RunState >= XP_RUNSTATE_GOT_BEACON)
 		{
 			ESP_LOGE(TAG, "!!Bad start: Is already running");
-			return -3;
+			return -XP_ERR_IS_RUNNING;
 		}
 
-		ESP_LOGV(TAG, "Starting UDP func");
+		//ESP_LOGV(TAG, "Starting UDP func");
 		//if (_startUDP()) GetBeacon();
 	}
 
@@ -284,6 +284,8 @@ int XpUDP::mainTaskLoop()
 {
 	long startTs = millis();
 
+	ESP_LOGV(TAG, "### Runstate =%d", _RunState);
+
 #ifdef XpUDP_TEST_ONLY
 	char* planeName = "Airfoillabs Cessna 172SP";
 
@@ -305,8 +307,9 @@ int XpUDP::mainTaskLoop()
 			//ESP_LOGD(TAG, "No extra step");
 	}
 #endif
-
+	// trigger watchdog timeout
 	esp_task_wdt_reset();
+
 	switch (_RunState)
 	{
 	case XP_RUNSTATE_INIT:
@@ -316,23 +319,26 @@ int XpUDP::mainTaskLoop()
 		}
 		_RunState = XP_RUNSTATE_WIFI_UP;
 		ESP_LOGV(TAG, "Runstate is XP_RUNSTATE_WIFI_UP");
+		break;
 	case XP_RUNSTATE_WIFI_UP:
 		if (_startUDP() == XP_ERR_SUCCESS)
 		{
 			ESP_LOGV(TAG, "Set state to XP_RUNSTATE_UDP_UP");
 			_RunState = XP_RUNSTATE_UDP_UP;
 		}
-		else break;
+		break;
 	case XP_RUNSTATE_UDP_UP:
 		//ESP_LOGV(TAG, "check for beacon start=%d last=%d interval=%d", startTs, _last_start, _Xp_beacon_restart_timeoutMs);
+		// wait a bit for next scan for beacon
 		while (_Xp_beacon_restart_timeoutMs > (millis() - _last_start));
 		//ESP_LOGV(TAG, "done wait");
-		if (GetBeacon() == XP_ERR_SUCCESS)
+		_last_start = millis();
+		if (GetBeacon(startTs) == XP_ERR_SUCCESS)
 		{
 			ESP_LOGV(TAG, "Set state to XP_RUNSTATE_GOT_BEACON");
 			_RunState = XP_RUNSTATE_GOT_BEACON;
 		}
-		else break;
+		break;
 	case XP_RUNSTATE_GOT_BEACON:
 		if (_firstStart)
 		{
@@ -340,6 +346,8 @@ int XpUDP::mainTaskLoop()
 			_RunState = XP_RUNSTATE_IS_CLEANING;
 			ESP_LOGV(TAG, "Set state to XP_RUNSTATE_IS_CLEANING");
 			_Udp.flush();
+			xEventGroupSetBits(s_connection_event_group, CLEANING_CONNECTED_BIT);
+			_startCleaning = _lastXpConnect;
 		}
 		else
 		{
@@ -348,8 +356,8 @@ int XpUDP::mainTaskLoop()
 		}
 		break;
 	case XP_RUNSTATE_IS_CLEANING:
-		//if (_Xp_initial_clean_timeoutMs < (startTs - _startCleaning))
-		if (true)  // for now cleaning not working
+		// check if we are done cleaning
+		if (_Xp_initial_clean_timeoutMs <= (startTs - _startCleaning))
 		{
 			DLPRINTLN(2, "End cleaning");
 			xEventGroupClearBits(s_connection_event_group, CLEANING_CONNECTED_BIT);
@@ -364,7 +372,7 @@ int XpUDP::mainTaskLoop()
 		else
 		{
 			dataReader(startTs);
-			_Udp.flush();
+			_Udp.flush();  // prevent overflow of UDP requests
 		}
 		break;
 	case XP_RUNSTATE_DONE_CLEANING:
@@ -372,25 +380,28 @@ int XpUDP::mainTaskLoop()
 		dataReader(startTs);
 		break;
 	case XP_RUNSTATE_GOT_PLANE:
+		// we dont need plane name anymore....
 		unRegisterDataRef(_planeInfoRec.canasId);
 		//_setStateFunc(true);  // signal to canbus interface that xplane interface is running
 		xEventGroupSetBits(s_connection_event_group, PLANE_CONNECTED_BIT | RUNNING_CONNECTED_BIT);
 		_RunState = XP_RUNSTATE_RUNNIG;
 		ESP_LOGV(TAG, "Runstate is XP_RUNSTATE_RUNNING");
-		_lastXpConnect = millis();
-		_myDataRefList.checkAll(true);
+		_lastXpConnect = startTs;
+		_myDataRefList.checkAll(true);  // do a check off all subscribed refs with new planeinfo
 		break;
 	case XP_RUNSTATE_RUNNIG:
 		// check if we are still reiving data from XPlane
 		if (_Xp_beacon_timeoutMs < (startTs - _lastXpConnect))
 		{
-			ESP_LOGV(TAG, "Runstate is XP_RUNSTATE_UDP_UP");
+			ESP_LOGE(TAG, "Lost connection: Runstate is XP_RUNSTATE_UDP_UP");
 			xEventGroupClearBits(s_connection_event_group, BEACON_CONNECTED_BIT | PLANE_CONNECTED_BIT);
 			_RunState = XP_RUNSTATE_UDP_UP;
 		}
+		else
+			checkDREFQueue();
+
 		dataReader(startTs);
 		// only if we are fully running
-		checkDREFQueue();
 
 		break;
 	case XP_RUNSTATE_STOPPED:
@@ -530,10 +541,9 @@ int XpUDP::_startUDP()
 //==================================================================================================
 //	get beacon from X Plane server and store adres and port
 //==================================================================================================
-int XpUDP::GetBeacon(long howLong)
+int XpUDP::GetBeacon(long startTs, long howLong)
 {
 	DLPRINTINFO(5, "START");
-	long startTs = millis();
 	int result = -XP_ERR_FAILED;
 
 	if (_RunState < XP_RUNSTATE_UDP_UP)
@@ -547,7 +557,7 @@ int XpUDP::GetBeacon(long howLong)
 	// wait for beacon transmision
 	do
 	{
-		result = _ReadBeacon();
+		result = _ReadBeacon(startTs);
 		esp_task_wdt_reset();
 		delay(10);
 	} while (result != 0 && ((millis() - startTs) < howLong));
@@ -556,11 +566,10 @@ int XpUDP::GetBeacon(long howLong)
 	DLPRINTINFO(5, "Stop");
 }
 //------------------------------------------------------------------------------------------------------------
-int XpUDP::_ReadBeacon()
+int XpUDP::_ReadBeacon(long startTs)
 {
 	int message_size;
 	int noBytes;
-	long startTs = millis();
 	int result = XpUDP::XP_ERR_SUCCESS;
 
 	_LastError = XpUDP::XP_ERR_SUCCESS;
@@ -608,11 +617,7 @@ int XpUDP::_ReadBeacon()
 					_XpListenPort = _becn_struct.port;
 
 					// correct start so update status
-					_lastXpConnect = millis();
-					ESP_LOGD(TAG, "Set state to XP_RUNSTATE_IS_CLEANING");
-					_RunState = XP_RUNSTATE_IS_CLEANING;
-					xEventGroupSetBits(s_connection_event_group, CLEANING_CONNECTED_BIT);
-					_startCleaning = _lastXpConnect;
+					_lastXpConnect = startTs;
 
 					// inform CANBUS Manager that system is running
 					//if (_setStateFunc != NULL)
@@ -773,7 +778,7 @@ int XpUDP::_processRREF(long startTs, int noBytes)
 				// not found in subscription list so sign out of a RREF
 				ESP_LOGD(TAG, "!!Code not found in subscription list or cleaning up, signing out of RREF:%d", en);
 				sendRREF(0, en, "");
-				if (_RunState = XP_RUNSTATE_IS_CLEANING) _startCleaning = startTs;
+				if (_RunState == XP_RUNSTATE_IS_CLEANING) _startCleaning = startTs;
 			}
 
 			DLPRINT(5, "Release semaphore");

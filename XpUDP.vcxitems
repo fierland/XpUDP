@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Label="Globals">
     <MSBuildAllProjects>$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
@@ -15,13 +15,23 @@
   </ItemGroup>
   <ItemGroup>
     <Text Include="$(MSBuildThisFileDirectory)readme.txt" />
-	<Text Include="$(MSBuildThisFileDirectory)library.properties" />
-  	<Text Include="$(MSBuildThisFileDirectory)XpUDP.h" />
-  </ItemGroup>
- <ItemGroup>
-    <!-- <ClInclude Include="$(MSBuildThisFileDirectory)XpUDP.h" /> -->
+    <Text Include="$(MSBuildThisFileDirectory)library.properties" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="$(MSBuildThisFileDirectory)XpUDP.cpp" />
+    <!-- <ClInclude Include="$(MSBuildThisFileDirectory)XpUDP.h" /> -->
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\GenericDefs.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\XpPlaneInfo.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\XpUDP.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\XpUDPdataRef.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\XpUDPdataRefList.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\xpudp_debug.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\XPUtils.h" />
   </ItemGroup>
-  </Project>
+  <ItemGroup>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\XpPlaneInfo.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\XpUDP.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\XpUDPdataRef.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\XpUDPdataRefList.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\XPUtils.cpp" />
+  </ItemGroup>
+</Project>
