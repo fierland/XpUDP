@@ -1,8 +1,8 @@
 #ifndef __XPUDPDATAREF_H_
 #define __XPUDPDATAREF_H_
 
-#include "XpPlaneInfo.h"
 #include <bitset>
+#include "XpPlaneInfo.h"
 
 //==================================================================================================
 class XpUDPdataRef {

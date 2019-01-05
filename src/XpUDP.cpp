@@ -168,6 +168,7 @@ extern "C" void taskXplane(void* parameter)
 	ESP_LOGD(TAG, "Task taskXplane started ");
 
 	xpudp = (XpUDP*)parameter;
+
 	for (;;)
 	{
 		esp_task_wdt_reset();
@@ -305,7 +306,7 @@ int XpUDP::mainTaskLoop()
 		//default:
 
 			//ESP_LOGD(TAG, "No extra step");
-	}
+}
 #endif
 	// trigger watchdog timeout
 	esp_task_wdt_reset();

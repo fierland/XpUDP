@@ -34,12 +34,6 @@
 #include "XpUDPdataRefList.h"
 #include "GenericDefs.h"
 
-#if defined(ARDUINO) && ARDUINO >= 100
-#	include "Arduino.h"
-#else
-#	include "WProgram.h"
-#endif
-
 #include <esp_task_wdt.h>
 
 #include <limits.h>

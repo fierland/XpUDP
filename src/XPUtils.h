@@ -26,14 +26,15 @@
 
  //#include <cstdint>
 #include <stdlib.h>
+#include <stdint.h>
 
-#if ARDUINO >= 100
-#include <Arduino.h>
-#else
-#include <WProgram.h>
-#include <wiring.h>
-#include <iostream>
-#endif
+//#if ARDUINO >= 100
+//#include <Arduino.h>
+//#else
+//#include <WProgram.h>
+//#include <wiring.h>
+//#include <iostream>
+//#endif
 
 	// typedefs for the xplane specific types
 typedef uint32_t xint;

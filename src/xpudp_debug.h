@@ -52,16 +52,15 @@ typedef enum {
 
 #define ESP_EARLY_LOGE(TAG, format, ...) DO_LOG_LEVEL_LOCAL(LOG_ERROR,TAG,format, ##__VA_ARGS__)
 #define ESP_EARLY_LOGW(TAG, format, ...) DO_LOG_LEVEL_LOCAL(LOG_WARN,TAG,format, ##__VA_ARGS__)
-#define ESP_EARLY_LOGD(TAG, format, ...) DO_LOG_LEVEL_LOCAL(LOG_INFO,TAG,format, ##__VA_ARGS__)
-#define ESP_EARLY_LOGV(TAG, format, ...) DO_LOG_LEVEL_LOCAL(LOG_DEBUG,TAG,format, ##__VA_ARGS__)
-#define ESP_EARLY_LOGI(TAG, format, ...) DO_LOG_LEVEL_LOCAL(LOG_VERBOSE,TAG,format, ##__VA_ARGS__)
+#define ESP_EARLY_LOGD(TAG, format, ...) DO_LOG_LEVEL_LOCAL(LOG_DEBUG,TAG,format, ##__VA_ARGS__)
+#define ESP_EARLY_LOGV(TAG, format, ...) DO_LOG_LEVEL_LOCAL(LOG_VERBOSE,TAG,format, ##__VA_ARGS__)
+#define ESP_EARLY_LOGI(TAG, format, ...) DO_LOG_LEVEL_LOCAL(LOG_INFO,TAG,format, ##__VA_ARGS__)
 
 #define ESP_LOGE(TAG, format, ...) DO_LOG_LEVEL_LOCAL(LOG_ERROR,TAG,format, ##__VA_ARGS__)
 #define ESP_LOGW(TAG, format, ...) DO_LOG_LEVEL_LOCAL(LOG_WARN,TAG,format, ##__VA_ARGS__)
-#define ESP_LOGD(TAG, format, ...) DO_LOG_LEVEL_LOCAL(LOG_INFO,TAG,format, ##__VA_ARGS__)
-#define ESP_LOGV(TAG, format, ...) DO_LOG_LEVEL_LOCAL(LOG_DEBUG,TAG,format, ##__VA_ARGS__)
-#define ESP_LOGI(TAG, format, ...) DO_LOG_LEVEL_LOCAL(LOG_VERBOSE,TAG,format, ##__VA_ARGS__)
-
+#define ESP_LOGD(TAG, format, ...) DO_LOG_LEVEL_LOCAL(LOG_DEBUG,TAG,format, ##__VA_ARGS__)
+#define ESP_LOGV(TAG, format, ...) DO_LOG_LEVEL_LOCAL(LOG_VERBOSE,TAG,format, ##__VA_ARGS__)
+#define ESP_LOGI(TAG, format, ...) DO_LOG_LEVEL_LOCAL(LOG_INFO,TAG,format, ##__VA_ARGS__)
 #define ESP_ERROR_CHECK(func) {esp_err_t err; err=func; if(err!=ESP_OK)\
 	{DO_LOGE("assert failed ERR=%d in %s at line %d\n",err,__PRETTY_FUNCTION__,__LINE__);} }
 #endif
