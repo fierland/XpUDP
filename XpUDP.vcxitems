@@ -19,7 +19,6 @@
   </ItemGroup>
   <ItemGroup>
     <!-- <ClInclude Include="$(MSBuildThisFileDirectory)XpUDP.h" /> -->
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\GenericDefs.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\XpPlaneInfo.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\XpUDP.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\XpUDPdataRef.h" />

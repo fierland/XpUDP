@@ -1,6 +1,9 @@
 #define LOG_LOCAL_LEVEL 5
 static const char *TAG = "XpUDPdataRef";
 
+#include <stdlib.h>
+#include <string.h>
+#include "esp32-hal.h"
 #include "XpUDPdataRef.h"
 #include "xpudp_debug.h"
 #include "esp_log.h"

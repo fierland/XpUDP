@@ -14,8 +14,8 @@ static const char *TAG = "XpUDPtest";
 
 #include "XpUDPtest.h"
 
-#include "esp_log.h"
 #include "xpudp_debug.h"
+#include "esp_log.h"
 
 //==================================================================================================
 //--------------------------------------------------------------------------------------------------
@@ -26,12 +26,13 @@ extern "C" void taskXupdTest(void* parameter)
 	ESP_LOGD(TAG, "Task xUdpTest started ");
 
 	xpudp = (XpUDPtest*)parameter;
+	vTaskDelay(500);
 
 	for (;;)
 	{
 		esp_task_wdt_reset();
 		xpudp->testMainLoop();
-		vTaskDelay(10);
+		vTaskDelay(200);
 	}
 }
 
@@ -53,6 +54,7 @@ void XpUDPtest::testMainLoop()
 	queueDataItem		_DataItem;
 	int i;
 	float oldVal;
+	long ts = millis();
 
 	// check RREF queue;
 	esp_task_wdt_reset();
@@ -70,14 +72,14 @@ void XpUDPtest::testMainLoop()
 
 	while (xQueueReceive(xQueueDREF, &_DataItem, 0) == pdTRUE)
 	{
-		ESP_LOGI(TAG, "Got new value for DREF=%d value=%d", _DataItem.canId, _DataItem.value);
+		ESP_LOGI(TAG, "Got new value for DREF=%d value=%f", _DataItem.canId,
+			_DataItem.data.container.FLOAT);
 		if (_findInlist(_DataItem.canId) == -1)
 		{
 			ESP_LOGE(TAG, "!! CanId is not registered before !!");
 		}
 	};
 	// check dataitem queu
-	long ts = millis();
 
 	esp_task_wdt_reset();
 	for (i = 0; i < _xUDPtestList.length(); i++)
@@ -109,27 +111,45 @@ void XpUDPtest::testMainLoop()
 						delta /= 100;
 						dir = rand() % 100;
 						if (dir < 50) delta *= -1;
-						
-						
 
 						_xUDPtestList[i]->curentvalue += delta;
+
+						if (_xUDPtestList[i]->curentvalue < _xUDPtestList[i]->info->minVal)
+							_xUDPtestList[i]->curentvalue = _xUDPtestList[i]->info->minVal;
+
+						if (_xUDPtestList[i]->curentvalue > _xUDPtestList[i]->info->maxVal)
+							_xUDPtestList[i]->curentvalue = _xUDPtestList[i]->info->maxVal;
+
 						ESP_LOGV(TAG, "delta value = (%f) %f %d new=%f", diffValue, delta, dir, _xUDPtestList[i]->curentvalue);
+						delay(10);
 					}
 					else
 					{
 						_xUDPtestList[i]->curentvalue += _xUDPtestList[i]->info->deltaVal;
+
+						if (_xUDPtestList[i]->curentvalue < _xUDPtestList[i]->info->minVal)
+							_xUDPtestList[i]->curentvalue = _xUDPtestList[i]->info->maxVal;
+
+						if (_xUDPtestList[i]->curentvalue > _xUDPtestList[i]->info->maxVal)
+							_xUDPtestList[i]->curentvalue = _xUDPtestList[i]->info->minVal;
 					}
-
-					if (_xUDPtestList[i]->curentvalue < _xUDPtestList[i]->info->minVal)
-						_xUDPtestList[i]->curentvalue = _xUDPtestList[i]->info->minVal;
-
-					if (_xUDPtestList[i]->curentvalue > _xUDPtestList[i]->info->maxVal)
-						_xUDPtestList[i]->curentvalue = _xUDPtestList[i]->info->maxVal;
 				}
 				ESP_LOGV(TAG, "[%d] value = (%f) %f", _xUDPtestList[i]->canId, oldVal, _xUDPtestList[i]->curentvalue);
 				//send to queue
 				_DataItem.canId = _xUDPtestList[i]->canId;
-				_DataItem.value = _xUDPtestList[i]->curentvalue;
+
+				switch (_xUDPtestList[i]->info->dataType)
+				{
+				case CANAS_DATATYPE_FLOAT:
+					_DataItem.data.container.FLOAT = _xUDPtestList[i]->curentvalue;
+					_DataItem.data.type = CANAS_DATATYPE_FLOAT;
+					break;
+				case CANAS_DATATYPE_UCHAR:
+					_DataItem.data.type = CANAS_DATATYPE_UCHAR;
+					_DataItem.data.container.UCHAR = (unsigned char)_xUDPtestList[i]->curentvalue;
+					break;
+				}
+
 				if (xQueueSendToBack(xQueueRREF, &_DataItem, 10) != pdPASS)
 				{
 					ESP_LOGE(TAG, "Error posting RREF to queue");
@@ -226,9 +246,7 @@ int XpUDPtest::_findTestInfo(uint16_t canId)
 				_testValueList[i].deltaVal,
 				_testValueList[i].interval,
 				_testValueList[i].startVal
-				);
-
-
+			);
 
 			break;
 		}

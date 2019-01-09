@@ -1,10 +1,12 @@
 #define LOG_LOCAL_LEVEL 5
 static const char *TAG = "XpUDPDataRefList";
 
+#include <stdlib.h>
+#include <string.h>
 #include "XpUDPdataRefList.h"
 #include "XpUDPdataRef.h"
+//#include "xpudp_debug.h"
 #include "esp_log.h"
-#include "xpudp_debug.h"
 
 //==================================================================================================
 // deconstructor clean everything up

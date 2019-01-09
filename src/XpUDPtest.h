@@ -18,6 +18,7 @@ typedef struct xUDPtestInfo {
 	float deltaVal;
 	int interval;
 	float startVal;
+	uint8_t dataType;
 };
 
 class XpUDPtest {
@@ -25,16 +26,16 @@ public:
 #define MAX_TEST_ITEMS 10
 
 	xUDPtestInfo _testValueList[MAX_TEST_ITEMS] = {
-	{ 201,  0, 26 ,-0.01,10, 20},
-	{ 202,  0, 26 ,-0.01,10, 15},
-	{ 203,  0,400 ,   0,10,200},
-	{ 204,  0, 19 ,   0,10,  3},
-	{ 205,-60, 60 ,   0,10, 40},
-	{ 206, 75,245 ,   0,10,150},
-	{ 207,  0,115 ,   0,10,100},
-	{ 208,  3,  7 ,   0,10,  5},
-	{ 209,  0,  1 ,-100,10, 1},
-	{1800,  0,100 ,   0,10, 60}
+	{ 201,  0, 26 ,-0.01,10, 20,CANAS_DATATYPE_FLOAT},
+	{ 202,  0, 26 ,-0.01,10, 15,CANAS_DATATYPE_FLOAT},
+	{ 203,  0,400 ,   0,10,200,CANAS_DATATYPE_FLOAT},
+	{ 204,  0, 19 ,   0,10,  3,CANAS_DATATYPE_FLOAT},
+	{ 205,-60, 60 ,   0,10, 40,CANAS_DATATYPE_FLOAT},
+	{ 206, 75,245 ,   0,10,150,CANAS_DATATYPE_FLOAT},
+	{ 207,  0,115 ,   0,10,100,CANAS_DATATYPE_FLOAT},
+	{ 208,  3,  7 ,   0,10,  5,CANAS_DATATYPE_FLOAT},
+	{ 209,  0,  1 ,-100,10, 1,CANAS_DATATYPE_UCHAR},
+	{1800,  0,100 ,   0,10, 60,CANAS_DATATYPE_FLOAT}
 	};
 
 	XpUDPtest();

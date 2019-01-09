@@ -35,9 +35,6 @@
     <Text Include="$(MSBuildThisFileDirectory)readme.txt" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\GenericDefs.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\XpPlaneInfo.h">
       <Filter>Header Files</Filter>
     </ClInclude>

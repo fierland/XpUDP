@@ -306,7 +306,7 @@ int XpUDP::mainTaskLoop()
 		//default:
 
 			//ESP_LOGD(TAG, "No extra step");
-}
+	}
 #endif
 	// trigger watchdog timeout
 	esp_task_wdt_reset();
@@ -749,7 +749,8 @@ int XpUDP::_processRREF(long startTs, int noBytes)
 						if (curRef->canId > 200)
 						{
 							_DataItem.canId = curRef->canId;
-							_DataItem.value = value;
+							_DataItem.data.type = CANAS_DATATYPE_FLOAT;
+							_DataItem.data.container.FLOAT = value;
 							if (xQueueSendToBack(xQueueRREF, &_DataItem, 10) != pdPASS)
 							{
 								ESP_LOGE(TAG, "Error posting RREF to queue");
@@ -910,7 +911,7 @@ int XpUDP::checkDREFQueue()
 
 			if (curRec != NULL && curRec->dataRef != NULL)
 			{
-				curRec->dataRef->setValue(_DataItem.value);
+				curRec->dataRef->setValue(_DataItem.data.container.FLOAT);
 
 				sendDREF(curRec);
 			}
